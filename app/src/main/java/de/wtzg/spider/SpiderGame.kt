@@ -2,14 +2,20 @@ package de.wtzg.spider
 
 import kotlin.random.Random
 
-/** suit: 0 = spades, 1 = hearts, 2 = clubs, 3 = diamonds. rank: 1 (ace) .. 13 (king). */
-data class Card(val suit: Int, val rank: Int, val faceUp: Boolean = false) {
+/**
+ * suit: 0 = spades, 1 = hearts, 2 = clubs, 3 = diamonds. rank: 1 (ace) .. 13 (king).
+ * [id] is unique per card in a game (0..103) so the UI can follow a card as it moves.
+ */
+data class Card(val suit: Int, val rank: Int, val faceUp: Boolean = false, val id: Int = 0) {
     val isRed: Boolean get() = suit == 1 || suit == 3
 
-    fun encode(): Int = (suit * 13 + rank - 1) + if (faceUp) 52 else 0
+    fun encode(): Int = id * 104 + (suit * 13 + rank - 1) + if (faceUp) 52 else 0
 
     companion object {
-        fun decode(n: Int) = Card((n % 52) / 13, n % 13 + 1, n >= 52)
+        fun decode(n: Int): Card {
+            val c = n % 104
+            return Card((c % 52) / 13, c % 13 + 1, c >= 52, n / 104)
+        }
     }
 }
 
@@ -22,6 +28,8 @@ class SpiderGame private constructor(
     val stock: MutableList<Card>,
     /** Suit of every completed King-to-Ace run, in completion order. */
     val completed: MutableList<Int>,
+    /** Card ids of every completed run (King first), parallel to [completed]. */
+    val completedIds: MutableList<List<Int>>,
     score: Int,
     moves: Int,
 ) {
@@ -34,6 +42,7 @@ class SpiderGame private constructor(
         val columns: List<List<Card>>,
         val stock: List<Card>,
         val completed: List<Int>,
+        val completedIds: List<List<Int>>,
         val score: Int,
         val moves: Int,
     )
@@ -99,6 +108,7 @@ class SpiderGame private constructor(
         columns.forEachIndexed { i, c -> c.clear(); c.addAll(s.columns[i]) }
         stock.clear(); stock.addAll(s.stock)
         completed.clear(); completed.addAll(s.completed)
+        completedIds.clear(); completedIds.addAll(s.completedIds)
         score = s.score - 1 // undo still costs a point, like the classic game
         moves = s.moves + 1
         return true
@@ -157,18 +167,19 @@ class SpiderGame private constructor(
     }
 
     fun serialize(): String = listOf(
-        "1",
+        "2",
         suitCount.toString(),
         score.toString(),
         moves.toString(),
         completed.joinToString(","),
         stock.joinToString(",") { it.encode().toString() },
         columns.joinToString("|") { col -> col.joinToString(",") { it.encode().toString() } },
+        completedIds.joinToString("|") { it.joinToString(",") },
     ).joinToString(";")
 
     private fun save() {
         history.add(
-            Snapshot(columns.map { it.toList() }, stock.toList(), completed.toList(), score, moves),
+            Snapshot(columns.map { it.toList() }, stock.toList(), completed.toList(), completedIds.toList(), score, moves),
         )
         if (history.size > MAX_UNDO) history.removeAt(0)
     }
@@ -188,6 +199,7 @@ class SpiderGame private constructor(
             val card = c[start + i]
             if (!card.faceUp || card.suit != suit || card.rank != 13 - i) return
         }
+        completedIds.add(c.subList(start, c.size).map { it.id })
         repeat(13) { c.removeAt(c.lastIndex) }
         completed.add(suit)
         score += 100
@@ -205,24 +217,35 @@ class SpiderGame private constructor(
                 2 -> listOf(0, 1)
                 else -> listOf(0, 1, 2, 3)
             }
-            val deck = (0 until 8 * 13).map { Card(suits[(it / 13) % suits.size], it % 13 + 1) }
+            val deck = (0 until 8 * 13).map { Card(suits[(it / 13) % suits.size], it % 13 + 1, id = it) }
                 .shuffled(random)
             val columns = List(COLUMNS) { ArrayList<Card>() }
             for (i in 0 until 54) columns[i % COLUMNS].add(deck[i])
             for (c in columns) c[c.lastIndex] = c.last().copy(faceUp = true)
-            return SpiderGame(suits.size, columns, deck.drop(54).toMutableList(), ArrayList(), 500, 0)
+            return SpiderGame(suits.size, columns, deck.drop(54).toMutableList(), ArrayList(), ArrayList(), 500, 0)
         }
 
         fun deserialize(s: String): SpiderGame? = try {
             val p = s.split(";")
-            require(p.size == 7 && p[0] == "1")
+            val v1 = p[0] == "1"
+            require((v1 && p.size == 7) || (p[0] == "2" && p.size == 8))
             fun ints(t: String) = if (t.isEmpty()) emptyList() else t.split(",").map { it.toInt() }
             val cols = p[6].split("|").map { t -> ints(t).map(Card::decode).toMutableList() }
             require(cols.size == COLUMNS)
-            SpiderGame(
-                p[1].toInt(), cols, ints(p[5]).map(Card::decode).toMutableList(),
-                ints(p[4]).toMutableList(), p[2].toInt(), p[3].toInt(),
-            )
+            val stock = ints(p[5]).map(Card::decode).toMutableList()
+            val completed = ints(p[4]).toMutableList()
+            val completedIds: MutableList<List<Int>> =
+                if (v1) completed.indices.map { emptyList<Int>() }.toMutableList()
+                else p[7].split("|").filter { it.isNotEmpty() }.map { ints(it) }.toMutableList()
+            if (v1) {
+                // Old saves had no card ids: hand out fresh ones.
+                var next = 0
+                for (c in cols) for (i in c.indices) c[i] = c[i].copy(id = next++)
+                for (i in stock.indices) stock[i] = stock[i].copy(id = next++)
+                for (k in completedIds.indices) completedIds[k] = List(13) { next++ }
+            }
+            require(completedIds.size == completed.size)
+            SpiderGame(p[1].toInt(), cols, stock, completed, completedIds, p[2].toInt(), p[3].toInt())
         } catch (e: Exception) {
             null
         }
@@ -232,6 +255,16 @@ class SpiderGame private constructor(
             columns: List<List<Card>>,
             stock: List<Card> = emptyList(),
             completed: List<Int> = emptyList(),
-        ) = SpiderGame(1, columns.map { it.toMutableList() }, stock.toMutableList(), completed.toMutableList(), 500, 0)
+        ): SpiderGame {
+            var next = 0
+            return SpiderGame(
+                1,
+                columns.map { col -> col.map { it.copy(id = next++) }.toMutableList() },
+                stock.map { it.copy(id = next++) }.toMutableList(),
+                completed.toMutableList(),
+                completed.map { List(13) { next++ } }.toMutableList(),
+                500, 0,
+            )
+        }
     }
 }

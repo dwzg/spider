@@ -124,5 +124,37 @@ class SpiderGameTest {
         }
     }
 
+    @Test
+    fun cardIdsAreUniqueAndSurviveMovesAndCompletion() {
+        val g = SpiderGame.newGame(2, Random(5))
+        fun ids() = (g.columns.flatten() + g.stock).map { it.id } + g.completedIds.flatten()
+        assertEquals((0 until 104).toSet(), ids().toSet())
+        g.deal()
+        g.hints().firstOrNull()?.let { g.move(it) }
+        assertEquals((0 until 104).toSet(), ids().toSet())
+
+        val run = (13 downTo 2).map { up(it) }
+        val h = SpiderGame.fromLayout(layout(run, listOf(up(1))))
+        val runIds = h.columns[0].map { it.id } + h.columns[1].map { it.id }
+        assertTrue(h.move(Move(1, 0, 0)))
+        assertEquals(listOf(runIds), h.completedIds)
+        assertTrue(h.undo())
+        assertTrue(h.completedIds.isEmpty())
+        assertEquals(runIds, h.columns[0].map { it.id } + h.columns[1].map { it.id })
+    }
+
+    @Test
+    fun oldSaveFormatStillLoads() {
+        // A version-1 save (no card ids) with one completed run.
+        val col = (0 until 10).joinToString("|") { "${52 + 4}" }
+        val v1 = "1;2;600;42;1;3,16;$col"
+        val g = SpiderGame.deserialize(v1)
+        assertNotNull(g)
+        assertEquals(1, g!!.completedIds.size)
+        val ids = (g.columns.flatten() + g.stock).map { it.id } + g.completedIds.flatten()
+        assertEquals(ids.size, ids.toSet().size)
+        assertEquals(g.serialize(), SpiderGame.deserialize(g.serialize())!!.serialize())
+    }
+
     private fun min(a: Int, b: Int) = if (a < b) a else b
 }
