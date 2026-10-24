@@ -102,7 +102,6 @@ class SpiderView(context: Context) : View(context) {
         tableauY = topY + cardH + gap * 2.5f
 
         rankPaint.textSize = cardW * 0.36f
-        courtPaint.textSize = cardW * 0.5f
         labelPaint.textSize = max(cardW * 0.22f, 10f * density)
         feltPaint.shader = RadialGradient(
             w / 2f, h * 0.3f, max(w, h) * 0.85f,
@@ -271,11 +270,6 @@ class SpiderView(context: Context) : View(context) {
     private val rankPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         typeface = Typeface.create("sans-serif-condensed", Typeface.BOLD)
     }
-    private val courtPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        typeface = Typeface.create(Typeface.SERIF, Typeface.BOLD); textAlign = Paint.Align.CENTER
-    }
-    private val courtFill = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val courtStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val suitPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0x99FFFFFF.toInt(); textAlign = Paint.Align.CENTER
@@ -294,7 +288,7 @@ class SpiderView(context: Context) : View(context) {
             val c = Canvas(bmp)
             val r = radius
             val p = Paint(Paint.ANTI_ALIAS_FLAG)
-            p.shader = LinearGradient(0f, 0f, w.toFloat(), h.toFloat(), 0xFF3557C9.toInt(), 0xFF1A2C78.toInt(), Shader.TileMode.CLAMP)
+            p.shader = LinearGradient(0f, 0f, w.toFloat(), h.toFloat(), 0xFFA3242E.toInt(), 0xFF540C13.toInt(), Shader.TileMode.CLAMP)
             rect.set(0f, 0f, w.toFloat(), h.toFloat())
             c.drawRoundRect(rect, r, r, p)
             // Diamond lattice inside a white frame.
@@ -318,7 +312,7 @@ class SpiderView(context: Context) : View(context) {
             c.drawRoundRect(rect, r * 0.5f, r * 0.5f, frame)
             // Small emblem in the middle.
             val e = w * 0.34f
-            val disc = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF1A2C78.toInt() }
+            val disc = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF540C13.toInt() }
             c.drawCircle(w / 2f, h / 2f, e * 0.62f, disc)
             c.drawCircle(w / 2f, h / 2f, e * 0.62f, frame)
             val sp = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xCCFFFFFF.toInt() }
@@ -459,24 +453,7 @@ class SpiderView(context: Context) : View(context) {
         drawIndex(canvas, card, x, y)
         canvas.restore()
 
-        val cx = x + cardW / 2
-        when {
-            card.rank > 10 -> {
-                // Court card: tinted panel with a big letter.
-                val fx = cardW * 0.2f; val top = cardH * 0.3f
-                rect.set(x + fx, y + top, x + cardW - fx, y + cardH - top * 0.75f)
-                courtFill.color = if (card.isRed) 0xFFFCE8E6.toInt() else 0xFFE6E9F5.toInt()
-                courtStroke.color = color and 0x66FFFFFF
-                courtStroke.strokeWidth = cardW * 0.02f
-                canvas.drawRoundRect(rect, radius * 0.5f, radius * 0.5f, courtFill)
-                canvas.drawRoundRect(rect, radius * 0.5f, radius * 0.5f, courtStroke)
-                courtPaint.color = color
-                canvas.drawText(RANKS[card.rank], cx, rect.top + rect.height() * 0.6f, courtPaint)
-                drawSuit(canvas, card.suit, cx, rect.bottom - cardW * 0.115f, cardW * 0.15f, suitPaint)
-            }
-            card.rank == 1 -> drawSuit(canvas, card.suit, cx, y + cardH * 0.58f, cardW * 0.62f, suitPaint)
-            else -> drawSuit(canvas, card.suit, cx, y + cardH * 0.6f, cardW * 0.46f, suitPaint)
-        }
+        drawSuit(canvas, card.suit, x + cardW / 2, y + cardH * 0.6f, cardW * 0.46f, suitPaint)
     }
 
     /** Rank in the top-left corner and a small suit at the top-right, readable when stacked. */

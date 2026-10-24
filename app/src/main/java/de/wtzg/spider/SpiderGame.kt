@@ -1,5 +1,6 @@
 package de.wtzg.spider
 
+import kotlin.math.abs
 import kotlin.random.Random
 
 /**
@@ -114,24 +115,51 @@ class SpiderGame private constructor(
         return true
     }
 
-    /** Where a tap on (col, index) should send the cards, or null if nowhere. */
+    /**
+     * Where a tap on (col, index) should send the cards, or null if no move helps.
+     *
+     * Ranking: a same-suit stack (the one that ends up with the longest same-suit run wins),
+     * then another suit (the stack whose own run gets broken least), then an empty column.
+     * Remaining ties go to the nearest column. Moves that only make things worse are skipped:
+     * a whole column into an empty one, or lifting cards off a same-suit parent onto a
+     * different suit or an empty column.
+     */
     fun bestTarget(col: Int, index: Int): Int? {
         if (!canPickUp(col, index)) return null
-        val card = columns[col][index]
+        val src = columns[col]
+        val card = src[index]
+        val moving = src.size - index
+        val parent = src.getOrNull(index - 1)
+        val onSameSuitParent = parent != null && parent.faceUp &&
+            parent.suit == card.suit && parent.rank == card.rank + 1
         var best: Int? = null
-        var bestScore = 0
-        for (offset in 1 until COLUMNS) {
-            val to = (col + offset) % COLUMNS
-            if (!canDrop(card, to)) continue
+        var bestScore = Int.MIN_VALUE
+        for (to in 0 until COLUMNS) {
+            if (to == col || !canDrop(card, to)) continue
             val top = columns[to].lastOrNull()
-            val s = when {
-                top == null -> if (index == 0) 0 else 1
-                top.suit == card.suit -> 3
-                else -> 2
+            var score = when {
+                top == null -> if (index == 0 || onSameSuitParent) continue else 1_000
+                top.suit == card.suit -> 100_000 + 100 * (suitRunLength(to) + moving)
+                onSameSuitParent -> continue
+                else -> 10_000 - 100 * suitRunLength(to)
             }
-            if (s > bestScore) { best = to; bestScore = s }
+            score -= abs(to - col)
+            if (score > bestScore) { bestScore = score; best = to }
         }
         return best
+    }
+
+    /** Length of the same-suit descending run at the bottom of a column. */
+    private fun suitRunLength(col: Int): Int {
+        val c = columns[col]
+        if (c.isEmpty()) return 0
+        var n = 1
+        for (i in c.lastIndex downTo 1) {
+            val a = c[i - 1]; val b = c[i]
+            if (!a.faceUp || a.suit != b.suit || a.rank != b.rank + 1) break
+            n++
+        }
+        return n
     }
 
     /** Useful moves, best first. Skips moves that only shuffle cards sideways. */

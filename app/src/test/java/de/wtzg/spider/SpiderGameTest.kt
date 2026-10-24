@@ -125,6 +125,49 @@ class SpiderGameTest {
     }
 
     @Test
+    fun bestTargetPrefersLongestSameSuitRun() {
+        val g = SpiderGame.fromLayout(
+            layout(
+                listOf(down(1), up(5)),
+                listOf(down(1), up(6)), // lone 6♠
+                listOf(up(8), up(7), up(6)), // 8♠ 7♠ 6♠
+            ),
+        )
+        assertEquals(2, g.bestTarget(0, 1))
+    }
+
+    @Test
+    fun bestTargetBreaksTheShortestOffSuitRun() {
+        val g = SpiderGame.fromLayout(
+            layout(
+                listOf(down(1), up(5)),
+                listOf(up(8, 1), up(7, 1), up(6, 1)), // run of three hearts
+                listOf(down(1), up(6, 2)), // lone 6♣
+            ),
+        )
+        assertEquals(2, g.bestTarget(0, 1))
+    }
+
+    @Test
+    fun bestTargetPrefersCardsOverEmptyColumns() {
+        val g = SpiderGame.fromLayout(layout(listOf(down(1), up(5)), emptyList(), listOf(up(6, 1))))
+        assertEquals(2, g.bestTarget(0, 1))
+    }
+
+    @Test
+    fun bestTargetSkipsPointlessMoves() {
+        // Whole column into an empty column.
+        val a = SpiderGame.fromLayout(layout(listOf(up(5)), emptyList()))
+        assertEquals(null, a.bestTarget(0, 0))
+        // 5♠ already sits on 6♠; moving it onto a 6♥ or an empty column only hurts.
+        val b = SpiderGame.fromLayout(layout(listOf(up(6), up(5)), listOf(up(6, 1)), emptyList()))
+        assertEquals(null, b.bestTarget(0, 1))
+        // ...but another 6♠ that extends a longer run is fine.
+        val c = SpiderGame.fromLayout(layout(listOf(up(6), up(5)), listOf(up(7), up(6))))
+        assertEquals(1, c.bestTarget(0, 1))
+    }
+
+    @Test
     fun cardIdsAreUniqueAndSurviveMovesAndCompletion() {
         val g = SpiderGame.newGame(2, Random(5))
         fun ids() = (g.columns.flatten() + g.stock).map { it.id } + g.completedIds.flatten()
